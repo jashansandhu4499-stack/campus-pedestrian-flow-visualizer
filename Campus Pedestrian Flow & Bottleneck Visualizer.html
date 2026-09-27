@@ -1,0 +1,1864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Campus Pedestrian Flow &amp; Bottleneck Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* Inlined from css/style.css */
+/* ------------------------------------------------------------
+   Campus Pedestrian Flow & Bottleneck Visualizer — styles
+   Design concept: a late-night campus operations console —
+   dark map surface, wayfinding teal/amber signal colors, and
+   monospaced data readouts like a live transit dashboard.
+   ------------------------------------------------------------ */
+
+:root {
+  --bg: #0b0f14;
+  --panel: #141a22;
+  --panel-alt: #10151c;
+  --border: #232b36;
+  --border-soft: #1b222c;
+  --text: #e9edf3;
+  --text-dim: #93a1b3;
+  --text-faint: #5f6b7d;
+
+  --teal: #3da89e;
+  --teal-soft: rgba(61, 168, 158, 0.16);
+  --amber: #e6b03c;
+  --amber-soft: rgba(230, 176, 60, 0.16);
+  --red: #d65243;
+  --red-soft: rgba(214, 82, 67, 0.16);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2 {
+  font-family: var(--font-display);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+button {
+  font-family: var(--font-mono);
+}
+
+/* ---------------- App shell ---------------- */
+
+.app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #10151c 0%, #0b0f14 100%);
+}
+
+.brand {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.brand-mark {
+  color: var(--teal);
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.brand-text h1 {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.brand-sep {
+  color: var(--teal);
+}
+
+.brand-sub {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  max-width: 62ch;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.header-status.running .status-dot {
+  background: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-soft);
+}
+
+.header-status.paused .status-dot {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px var(--amber-soft);
+}
+
+/* ---------------- Layout ---------------- */
+
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  padding: 16px 24px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.panel-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ---------------- Map panel ---------------- */
+
+.map-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+}
+
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--panel-alt);
+}
+
+.mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mode-btn.active {
+  background: var(--teal);
+  color: #06120f;
+  font-weight: 600;
+}
+
+.canvas-wrap {
+  position: relative;
+  flex: 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 0%, #131a22 0%, #0d1218 70%);
+  border: 1px solid var(--border-soft);
+  min-height: 460px;
+}
+
+#mapCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(11, 15, 20, 0.82);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  backdrop-filter: blur(4px);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  max-width: 220px;
+}
+
+.legend-title {
+  font-family: var(--font-display);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 11.5px;
+  margin-bottom: 6px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+}
+
+.legend-row .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.dot.gate { background: #3da89e; }
+.dot.building { background: #e6b03c; }
+.dot.junction { background: #5c6478; }
+.dot.walker { background: #eef3ff; }
+.dot.walker.slow { background: #f3c969; box-shadow: 0 0 0 1.5px rgba(230,150,40,0.9); }
+
+.legend-row .swatch.grad {
+  width: 26px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #3da89e, #e6b03c, #d65243);
+  flex-shrink: 0;
+}
+
+/* ---------------- Controls ---------------- */
+
+.control-row {
+  margin-bottom: 14px;
+}
+
+.control-row label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.control-value {
+  font-family: var(--font-mono);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+input[type="range"] {
+  width: 100%;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 2px solid #06120f;
+  cursor: pointer;
+  margin-top: -1px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 2px solid #06120f;
+  cursor: pointer;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  flex: 1;
+  min-width: 84px;
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--teal);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #06120f;
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #49bcb1;
+  border-color: #49bcb1;
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+/* ---------------- Stats ---------------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-card {
+  border: 1px solid var(--border-soft);
+  background: var(--panel-alt);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.stat-card.wide {
+  grid-column: 1 / -1;
+}
+
+.stat-label {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  text-transform: none;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value .unit {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.meter {
+  margin-top: 8px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #3da89e, #e6b03c 65%, #d65243);
+  transition: width 0.25s ease;
+}
+
+.bottleneck-list {
+  margin-top: 14px;
+}
+
+.bottleneck-list ol {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bottleneck-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-alt);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+}
+
+.bottleneck-list .cname {
+  color: var(--text);
+}
+
+.bottleneck-list .cval {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-clock {
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  text-align: right;
+}
+
+/* ---------------- Compare panel ---------------- */
+
+.compare-hint {
+  margin: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.compare-results {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.compare-metric-title {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 56px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.bar-label {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.bar-track {
+  height: 10px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 5px 0 0 5px;
+  transition: width 0.4s ease;
+}
+
+.bar-fill.two-way { background: var(--teal); }
+.bar-fill.one-way { background: var(--amber); }
+
+.bar-num {
+  font-size: 11.5px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.compare-verdict {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-alt);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+/* ---------------- Footer ---------------- */
+
+.app-footer {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  padding: 12px 24px 20px;
+}
+
+/* ---------------- Responsive ---------------- */
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .map-panel {
+    min-height: 420px;
+  }
+  .canvas-wrap {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .bar-row {
+    grid-template-columns: 44px 1fr 48px;
+  }
+  .panel-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ HEADER ============ -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="26" height="26">
+          <circle cx="8" cy="24" r="2.4" fill="currentColor"/>
+          <circle cx="16" cy="24" r="2.4" fill="currentColor" opacity="0.55"/>
+          <circle cx="24" cy="24" r="2.4" fill="currentColor" opacity="0.3"/>
+          <path d="M4 16 L16 4 L28 16" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>Campus Pedestrian Flow <span class="brand-sep">&amp;</span> Bottleneck Visualizer</h1>
+        <p class="brand-sub">A synthetic demo campus — not a real institution — for exploring how foot-traffic rules shape congestion.</p>
+      </div>
+    </div>
+    <div class="header-status" id="headerStatus">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Stopped</span>
+    </div>
+  </header>
+
+  <!-- ============ MAIN LAYOUT ============ -->
+  <main class="layout">
+
+    <!-- ---------- MAP PANEL ---------- -->
+    <section class="panel map-panel" aria-label="Campus map simulation">
+      <div class="panel-head">
+        <h2>Campus Map</h2>
+        <div class="mode-toggle" role="tablist" aria-label="Corridor mode">
+          <button class="mode-btn active" data-mode="two-way" role="tab" aria-selected="true">Two-Way Corridors</button>
+          <button class="mode-btn" data-mode="one-way" role="tab" aria-selected="false">One-Way Corridors</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="mapCanvas"></canvas>
+
+        <div class="legend" id="legend">
+          <div class="legend-title">Legend</div>
+          <div class="legend-row"><span class="dot gate"></span> Gate (spawn / exit)</div>
+          <div class="legend-row"><span class="dot building"></span> Building</div>
+          <div class="legend-row"><span class="dot junction"></span> Junction</div>
+          <div class="legend-row"><span class="swatch grad"></span> Corridor load: low → high</div>
+          <div class="legend-row"><span class="dot walker"></span> Pedestrian</div>
+          <div class="legend-row"><span class="dot walker slow"></span> Slowed by crowding</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- SIDEBAR ---------- -->
+    <aside class="sidebar">
+
+      <!-- Controls -->
+      <section class="panel controls-panel" aria-label="Simulation controls">
+        <div class="panel-head"><h2>Controls</h2></div>
+
+        <div class="control-row">
+          <label for="populationSlider">
+            Target pedestrians
+            <span class="control-value" id="populationValue">60</span>
+          </label>
+          <input type="range" id="populationSlider" min="5" max="250" step="5" value="60" />
+        </div>
+
+        <div class="control-row">
+          <label for="speedSlider">
+            Simulation speed
+            <span class="control-value" id="speedValue">1×</span>
+          </label>
+          <input type="range" id="speedSlider" min="1" max="6" step="1" value="1" />
+        </div>
+
+        <div class="button-row">
+          <button class="btn btn-primary" id="startBtn">Start</button>
+          <button class="btn" id="pauseBtn" disabled>Pause</button>
+          <button class="btn btn-ghost" id="resetBtn">Reset</button>
+        </div>
+      </section>
+
+      <!-- Live stats -->
+      <section class="panel stats-panel" aria-label="Live statistics">
+        <div class="panel-head"><h2>Live Statistics</h2></div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Active pedestrians</div>
+            <div class="stat-value" id="statActive">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Completed trips</div>
+            <div class="stat-value" id="statCompleted">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Avg. travel time</div>
+            <div class="stat-value" id="statAvgTime">0.0<span class="unit">s</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Throughput</div>
+            <div class="stat-value" id="statThroughput">0.0<span class="unit">/min</span></div>
+          </div>
+          <div class="stat-card wide">
+            <div class="stat-label">Campus-wide congestion</div>
+            <div class="stat-value" id="statCongestion">0<span class="unit">%</span></div>
+            <div class="meter"><div class="meter-fill" id="congestionMeter"></div></div>
+          </div>
+        </div>
+
+        <div class="bottleneck-list">
+          <div class="stat-label">Most congested corridors</div>
+          <ol id="bottleneckList"></ol>
+        </div>
+
+        <div class="sim-clock">Simulated time elapsed: <span id="simClock">00:00</span></div>
+      </section>
+
+      <!-- Comparison -->
+      <section class="panel compare-panel" aria-label="Compare corridor configurations">
+        <div class="panel-head">
+          <h2>Compare Configurations</h2>
+        </div>
+        <p class="compare-hint">
+          Runs a fast, non-rendered simulation of both corridor rules with the
+          same pedestrian volume and random spawn pattern, then compares the outcomes.
+        </p>
+        <div class="button-row">
+          <button class="btn btn-primary" id="compareBtn">Run Comparison</button>
+        </div>
+        <div class="compare-results" id="compareResults" hidden>
+          <div class="compare-metric">
+            <div class="compare-metric-title">Avg. travel time (s)</div>
+            <div class="bar-row">
+              <div class="bar-label">Two-way</div>
+              <div class="bar-track"><div class="bar-fill two-way" id="barTravelTwo"></div></div>
+              <div class="bar-num" id="numTravelTwo">–</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">One-way</div>
+              <div class="bar-track"><div class="bar-fill one-way" id="barTravelOne"></div></div>
+              <div class="bar-num" id="numTravelOne">–</div>
+            </div>
+          </div>
+
+          <div class="compare-metric">
+            <div class="compare-metric-title">Throughput (trips / min)</div>
+            <div class="bar-row">
+              <div class="bar-label">Two-way</div>
+              <div class="bar-track"><div class="bar-fill two-way" id="barThroughputTwo"></div></div>
+              <div class="bar-num" id="numThroughputTwo">–</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">One-way</div>
+              <div class="bar-track"><div class="bar-fill one-way" id="barThroughputOne"></div></div>
+              <div class="bar-num" id="numThroughputOne">–</div>
+            </div>
+          </div>
+
+          <div class="compare-metric">
+            <div class="compare-metric-title">Peak congestion (%)</div>
+            <div class="bar-row">
+              <div class="bar-label">Two-way</div>
+              <div class="bar-track"><div class="bar-fill two-way" id="barCongestionTwo"></div></div>
+              <div class="bar-num" id="numCongestionTwo">–</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">One-way</div>
+              <div class="bar-track"><div class="bar-fill one-way" id="barCongestionOne"></div></div>
+              <div class="bar-num" id="numCongestionOne">–</div>
+            </div>
+          </div>
+
+          <p class="compare-verdict" id="compareVerdict"></p>
+        </div>
+      </section>
+
+    </aside>
+  </main>
+
+  <footer class="app-footer">
+    Synthetic demo data — the campus, buildings and traffic patterns shown are fictional and built solely to illustrate the simulator.
+  </footer>
+</div>
+
+<script>
+/* Inlined from js/rng.js */
+/**
+ * rng.js
+ * Small seeded PRNG (mulberry32) so the "Compare Modes" feature can run
+ * two-way and one-way simulations against an identical stream of random
+ * spawn/destination choices — an apples-to-apples comparison.
+ */
+
+function createRng(seed) {
+  let a = seed >>> 0;
+  return function rng() {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function rngPick(rng, arr) {
+  return arr[Math.floor(rng() * arr.length) % arr.length];
+}
+
+</script>
+<script>
+/* Inlined from js/campusMap.js */
+/**
+ * campusMap.js
+ * ------------------------------------------------------------
+ * Synthetic, demo-only campus layout. None of the buildings,
+ * gates or paths represent a real institution — this is a
+ * fictional campus built purely to demonstrate the simulator.
+ *
+ * The campus is modeled as a graph:
+ *   - NODES  = intersections, gates and building entrances
+ *   - EDGES  = pedestrian corridors connecting two nodes
+ *
+ * Coordinates are in an abstract 1000 x 650 "map space" that
+ * the renderer scales to fit the canvas.
+ * ------------------------------------------------------------
+ */
+
+const MAP_WIDTH = 1000;
+const MAP_HEIGHT = 650;
+
+// type: 'gate' (campus entrance/exit, where walkers spawn & leave)
+//       'building' (a destination, walkers dwell then usually leave via a gate)
+//       'junction' (a bare path intersection, never a destination)
+const CAMPUS_NODES = [
+  { id: 'gate_n', label: 'North Gate', x: 500, y: 40, type: 'gate' },
+  { id: 'gate_s', label: 'South Gate', x: 500, y: 610, type: 'gate' },
+  { id: 'gate_e', label: 'East Gate', x: 945, y: 325, type: 'gate' },
+  { id: 'gate_w', label: 'West Gate', x: 55, y: 325, type: 'gate' },
+
+  { id: 'library', label: 'Library', x: 255, y: 165, type: 'building' },
+  { id: 'student_center', label: 'Student Center', x: 745, y: 165, type: 'building' },
+  { id: 'science', label: 'Science Hall', x: 255, y: 485, type: 'building' },
+  { id: 'engineering', label: 'Engineering Hall', x: 745, y: 485, type: 'building' },
+
+  { id: 'plaza', label: 'Central Plaza', x: 500, y: 325, type: 'junction' },
+  { id: 'n_junction', label: 'North Walk Junction', x: 500, y: 165, type: 'junction' },
+  { id: 's_junction', label: 'South Walk Junction', x: 500, y: 485, type: 'junction' },
+];
+
+// width = corridor width in map-space px (drives capacity + visual thickness).
+// The plaza<->junction links are deliberately narrow: every north/south
+// trip on campus is forced through these two segments, making them the
+// designed bottleneck of the demo map.
+const CAMPUS_EDGES = [
+  { id: 'e_gn_nj', from: 'gate_n', to: 'n_junction', width: 34 },
+  { id: 'e_nj_lib', from: 'n_junction', to: 'library', width: 26 },
+  { id: 'e_nj_sc', from: 'n_junction', to: 'student_center', width: 26 },
+  { id: 'e_nj_plaza', from: 'n_junction', to: 'plaza', width: 16 }, // bottleneck
+  { id: 'e_plaza_sj', from: 'plaza', to: 's_junction', width: 16 }, // bottleneck
+  { id: 'e_plaza_gw', from: 'plaza', to: 'gate_w', width: 28 },
+  { id: 'e_plaza_ge', from: 'plaza', to: 'gate_e', width: 28 },
+  { id: 'e_sj_sci', from: 's_junction', to: 'science', width: 26 },
+  { id: 'e_sj_eng', from: 's_junction', to: 'engineering', width: 26 },
+  { id: 'e_sj_gs', from: 's_junction', to: 'gate_s', width: 34 },
+];
+
+function nodeById(id) {
+  return CAMPUS_NODES.find((n) => n.id === id);
+}
+
+function edgeLength(edge) {
+  const a = nodeById(edge.from);
+  const b = nodeById(edge.to);
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+// Comfortable capacity for an edge: wider + longer corridors can
+// comfortably hold more people at once before they start colliding.
+function baseCapacity(edge) {
+  const len = edgeLength(edge);
+  return Math.max(2, Math.round((edge.width / 11) * (len / 55)));
+}
+
+function buildGraph() {
+  const nodes = CAMPUS_NODES.map((n) => ({ ...n }));
+  const edges = CAMPUS_EDGES.map((e) => ({
+    ...e,
+    length: edgeLength(e),
+    capacity: baseCapacity(e),
+  }));
+
+  const adjacency = new Map();
+  nodes.forEach((n) => adjacency.set(n.id, []));
+  edges.forEach((e) => {
+    adjacency.get(e.from).push({ edge: e, dir: 'forward', to: e.to });
+    adjacency.get(e.to).push({ edge: e, dir: 'reverse', to: e.from });
+  });
+
+  return { nodes, edges, adjacency };
+}
+
+const GATE_IDS = CAMPUS_NODES.filter((n) => n.type === 'gate').map((n) => n.id);
+const DESTINATION_IDS = CAMPUS_NODES
+  .filter((n) => n.type === 'building' || n.type === 'gate')
+  .map((n) => n.id);
+
+</script>
+<script>
+/* Inlined from js/pathfinding.js */
+/**
+ * pathfinding.js
+ * ------------------------------------------------------------
+ * Congestion-aware shortest path. Each edge's "cost" isn't just
+ * its physical length — it's the estimated time to cross it
+ * given how crowded it currently is. That means a newly spawned
+ * pedestrian will route AROUND a jammed corridor if a longer but
+ * currently-clearer corridor is faster overall, exactly like the
+ * "which line looks shorter" decision real pedestrians make.
+ * ------------------------------------------------------------
+ */
+
+// Estimated seconds to cross `edge` walking `dir` ('forward'|'reverse')
+// under the current occupancy of the edge and the active corridor mode.
+function estimateEdgeCost(edge, dir, mode, baseSpeed) {
+  const forward = edge.forwardCount || 0;
+  const reverse = edge.reverseCount || 0;
+  const withFlow = dir === 'forward' ? forward : reverse;
+  const againstFlow = dir === 'forward' ? reverse : forward;
+
+  const effectiveCapacity = edge.capacity * (mode === 'one-way' ? 0.85 : 1);
+  const occupancyRatio = (forward + reverse) / effectiveCapacity;
+
+  // Density slowdown: crowded corridors are slower to cross.
+  let densityFactor = 1 - Math.max(0, occupancyRatio - 0.4) * 0.85;
+  densityFactor = Math.max(0.2, Math.min(1, densityFactor));
+
+  // Counter-flow friction only exists in two-way mode: pedestrians
+  // walking toward you slow you down. One-way corridors separate the
+  // flows into dedicated lanes, so this friction disappears.
+  let counterFlowFactor = 1;
+  if (mode === 'two-way' && againstFlow > 0) {
+    counterFlowFactor = Math.max(0.45, 1 - 0.12 * againstFlow);
+  }
+
+  const effectiveSpeed = baseSpeed * densityFactor * counterFlowFactor;
+  return edge.length / effectiveSpeed;
+}
+
+/**
+ * Dijkstra shortest (time-weighted) path from `startId` to `goalId`.
+ * Returns an array of { edge, dir } steps, or null if unreachable.
+ */
+function findPath(graph, startId, goalId, mode, baseSpeed) {
+  const { adjacency } = graph;
+  const dist = new Map();
+  const prev = new Map(); // nodeId -> { edge, dir, fromNode }
+  const visited = new Set();
+
+  adjacency.forEach((_, id) => dist.set(id, Infinity));
+  dist.set(startId, 0);
+
+  // Simple array-based priority queue — the graph is tiny (11 nodes),
+  // so this is plenty fast without a binary heap.
+  const queue = [startId];
+
+  while (queue.length) {
+    queue.sort((a, b) => dist.get(a) - dist.get(b));
+    const current = queue.shift();
+    if (visited.has(current)) continue;
+    visited.add(current);
+    if (current === goalId) break;
+
+    const neighbors = adjacency.get(current) || [];
+    for (const link of neighbors) {
+      if (visited.has(link.to)) continue;
+      const cost = estimateEdgeCost(link.edge, link.dir, mode, baseSpeed);
+      const nd = dist.get(current) + cost;
+      if (nd < dist.get(link.to)) {
+        dist.set(link.to, nd);
+        prev.set(link.to, { edge: link.edge, dir: link.dir, fromNode: current });
+        queue.push(link.to);
+      }
+    }
+  }
+
+  if (dist.get(goalId) === Infinity || !visited.has(goalId)) return null;
+
+  const steps = [];
+  let cursor = goalId;
+  while (cursor !== startId) {
+    const step = prev.get(cursor);
+    if (!step) return null;
+    steps.unshift({ edge: step.edge, dir: step.dir });
+    cursor = step.fromNode;
+  }
+  return steps;
+}
+
+</script>
+<script>
+/* Inlined from js/agent.js */
+/**
+ * agent.js
+ * A single simulated pedestrian walking a precomputed path
+ * (a list of { edge, dir } steps) node to node across the campus.
+ */
+
+let AGENT_SEQ = 1;
+
+class Agent {
+  constructor({ originId, destinationId, path, baseSpeed, spawnTime, rng }) {
+    this.id = AGENT_SEQ++;
+    this.originId = originId;
+    this.destinationId = destinationId;
+    this.path = path; // [{edge, dir}]
+    this.stepIndex = 0;
+    this.t = 0; // progress along current edge, 0..1
+    this.baseSpeed = baseSpeed * (0.85 + (rng ? rng() : Math.random()) * 0.3); // gentle individual variance
+    this.spawnTime = spawnTime;
+    this.finishTime = null;
+    this.state = 'traveling'; // 'traveling' | 'done' | 'stuck'
+    this.x = 0;
+    this.y = 0;
+    this.currentSpeedFactor = 1;
+    this._rng = rng || Math.random;
+    this._assignLane(this.path[0], true);
+  }
+
+  get currentStep() {
+    return this.path[this.stepIndex];
+  }
+
+  // Picks a lateral offset (perpendicular to walking direction) within
+  // the corridor width. Two-way mode: pedestrians keep to the right of
+  // the corridor relative to their walking direction (self-organizing
+  // lanes, like real foot traffic). One-way mode: no opposing traffic,
+  // so pedestrians spread across the full width.
+  _assignLane(step, isFirst) {
+    if (!step) return;
+    const w = step.edge.width;
+    const margin = 5;
+    const halfUsable = w / 2 - margin;
+    const mode = step.__mode || 'two-way';
+    if (mode === 'two-way') {
+      const side = step.dir === 'forward' ? 1 : -1;
+      this.laneOffset = side * (this._rng() * halfUsable * 0.9 + halfUsable * 0.1);
+    } else {
+      this.laneOffset = (this._rng() * 2 - 1) * halfUsable;
+    }
+  }
+
+  /**
+   * Advance the agent by dt seconds. `getEdgeState(edge)` returns the
+   * live forward/reverse occupancy counts for congestion lookups.
+   * `mode` is 'two-way' | 'one-way'.
+   */
+  update(dt, mode, getEdgeState) {
+    if (this.state !== 'traveling') return;
+    const step = this.currentStep;
+    if (!step) {
+      this.state = 'done';
+      return;
+    }
+    step.__mode = mode;
+
+    const { edge, dir } = step;
+    const { forward, reverse } = getEdgeState(edge);
+    const withFlow = dir === 'forward' ? forward : reverse;
+    const againstFlow = dir === 'forward' ? reverse : forward;
+    const effectiveCapacity = edge.capacity * (mode === 'one-way' ? 0.85 : 1);
+    const occupancyRatio = (forward + reverse) / effectiveCapacity;
+
+    let densityFactor = 1 - Math.max(0, occupancyRatio - 0.4) * 0.85;
+    densityFactor = Math.max(0.18, Math.min(1, densityFactor));
+
+    let counterFlowFactor = 1;
+    if (mode === 'two-way' && againstFlow > 0) {
+      counterFlowFactor = Math.max(0.45, 1 - 0.12 * againstFlow);
+    }
+
+    this.currentSpeedFactor = densityFactor * counterFlowFactor;
+    const speed = this.baseSpeed * this.currentSpeedFactor;
+    this.t += (speed * dt) / edge.length;
+
+    if (this.t >= 1) {
+      this.stepIndex += 1;
+      this.t = 0;
+      const next = this.currentStep;
+      if (!next) {
+        this.state = 'done';
+      } else {
+        this._assignLane(next);
+      }
+    }
+    this._updatePosition(graphNodeLookup);
+  }
+
+  _updatePosition(nodeLookup) {
+    const step = this.currentStep;
+    if (!step) return;
+    const fromId = step.dir === 'forward' ? step.edge.from : step.edge.to;
+    const toId = step.dir === 'forward' ? step.edge.to : step.edge.from;
+    const a = nodeLookup(fromId);
+    const b = nodeLookup(toId);
+    const t = this.t;
+    const bx = a.x + (b.x - a.x) * t;
+    const by = a.y + (b.y - a.y) * t;
+
+    // perpendicular unit vector for the lane offset
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len;
+    const py = dx / len;
+
+    this.x = bx + px * this.laneOffset;
+    this.y = by + py * this.laneOffset;
+  }
+}
+
+// Set by simulation.js before any agent update — avoids passing the
+// whole graph through every call.
+let graphNodeLookup = () => ({ x: 0, y: 0 });
+function setAgentNodeLookup(fn) {
+  graphNodeLookup = fn;
+}
+
+</script>
+<script>
+/* Inlined from js/simulation.js */
+/**
+ * simulation.js
+ * ------------------------------------------------------------
+ * Owns the live state of one simulation run: the graph, the
+ * active agents, the corridor mode, and the running statistics.
+ * Framework-free — works both driven by requestAnimationFrame
+ * (live, rendered) and stepped synchronously in a tight loop
+ * (headless, for the "Compare Modes" feature).
+ * ------------------------------------------------------------
+ */
+
+const BASE_WALK_SPEED = 46; // map-space px/second at a comfortable pace
+
+class Simulation {
+  constructor({ mode = 'two-way', targetPopulation = 60, seed = null } = {}) {
+    this.graph = buildGraph();
+    this.nodeLookup = new Map(this.graph.nodes.map((n) => [n.id, n]));
+    this.mode = mode;
+    this.targetPopulation = targetPopulation;
+    this.rng = seed !== null ? createRng(seed) : Math.random;
+
+    this.agents = [];
+    this.elapsedTime = 0;
+    this.spawnedTotal = 0;
+    this.completedTotal = 0;
+    this.completedTravelTimes = []; // rolling window for responsive avg
+    this.allTravelTimesSum = 0;
+    this.allTravelTimesCount = 0;
+    this.throughputLog = []; // { t, completedTotal } samples for rate calc
+    this.running = false;
+    this._spawnCooldown = 0;
+    this._peakCongestion = 0;
+
+    setAgentNodeLookup((id) => this.nodeLookup.get(id));
+
+    // reset per-edge live occupancy
+    this.graph.edges.forEach((e) => {
+      e.forwardCount = 0;
+      e.reverseCount = 0;
+    });
+  }
+
+  setMode(mode) {
+    this.mode = mode;
+  }
+
+  setTargetPopulation(n) {
+    this.targetPopulation = Math.max(0, Math.round(n));
+  }
+
+  _pickRandom(arr) {
+    return arr[Math.floor(this.rng() * arr.length) % arr.length];
+  }
+
+  _trySpawnAgent() {
+    const origin = this._pickRandom(GATE_IDS);
+    let destination = this._pickRandom(DESTINATION_IDS);
+    let guard = 0;
+    while (destination === origin && guard < 10) {
+      destination = this._pickRandom(DESTINATION_IDS);
+      guard++;
+    }
+    if (destination === origin) return false;
+
+    const path = findPath(this.graph, origin, destination, this.mode, BASE_WALK_SPEED);
+    if (!path || path.length === 0) return false;
+
+    const agent = new Agent({
+      originId: origin,
+      destinationId: destination,
+      path,
+      baseSpeed: BASE_WALK_SPEED,
+      spawnTime: this.elapsedTime,
+      rng: this.rng,
+    });
+    this.agents.push(agent);
+    this.spawnedTotal += 1;
+    return true;
+  }
+
+  _recomputeEdgeOccupancy() {
+    this.graph.edges.forEach((e) => {
+      e.forwardCount = 0;
+      e.reverseCount = 0;
+    });
+    for (const agent of this.agents) {
+      if (agent.state !== 'traveling') continue;
+      const step = agent.currentStep;
+      if (!step) continue;
+      if (step.dir === 'forward') step.edge.forwardCount += 1;
+      else step.edge.reverseCount += 1;
+    }
+  }
+
+  _getEdgeState(edge) {
+    return { forward: edge.forwardCount || 0, reverse: edge.reverseCount || 0 };
+  }
+
+  /** Advance the simulation by dt seconds (already multiplied by any speed factor). */
+  step(dt) {
+    this.elapsedTime += dt;
+
+    // Maintain population: spawn gradually rather than all at once so
+    // the campus fills up visibly instead of teleporting a crowd in.
+    const activeCount = this.agents.filter((a) => a.state === 'traveling').length;
+    this._spawnCooldown -= dt;
+    if (activeCount < this.targetPopulation && this._spawnCooldown <= 0) {
+      this._trySpawnAgent();
+      // spawn faster when far below target, slower near target (steadier state)
+      const deficit = this.targetPopulation - activeCount;
+      this._spawnCooldown = deficit > 5 ? 0.08 : 0.35;
+    }
+
+    this._recomputeEdgeOccupancy();
+
+    const getEdgeState = (e) => this._getEdgeState(e);
+    for (const agent of this.agents) {
+      if (agent.state !== 'traveling') continue;
+      agent.update(dt, this.mode, getEdgeState);
+      if (agent.state === 'done') {
+        const travelTime = this.elapsedTime - agent.spawnTime;
+        agent.finishTime = this.elapsedTime;
+        this.completedTotal += 1;
+        this.completedTravelTimes.push(travelTime);
+        if (this.completedTravelTimes.length > 200) this.completedTravelTimes.shift();
+        this.allTravelTimesSum += travelTime;
+        this.allTravelTimesCount += 1;
+      }
+    }
+
+    // drop finished agents (keep the array lean)
+    if (this.agents.length > 4000 || this.elapsedTime % 1 < dt) {
+      this.agents = this.agents.filter((a) => a.state === 'traveling');
+    }
+
+    this.throughputLog.push({ t: this.elapsedTime, completed: this.completedTotal });
+    if (this.throughputLog.length > 600) this.throughputLog.shift();
+
+    const currentCongestion = this.overallCongestion();
+    if (currentCongestion > this._peakCongestion) this._peakCongestion = currentCongestion;
+  }
+
+  // ---- Stats -------------------------------------------------
+
+  activeCount() {
+    return this.agents.filter((a) => a.state === 'traveling').length;
+  }
+
+  averageTravelTime() {
+    if (this.completedTravelTimes.length === 0) return 0;
+    const sum = this.completedTravelTimes.reduce((a, b) => a + b, 0);
+    return sum / this.completedTravelTimes.length;
+  }
+
+  overallAverageTravelTime() {
+    if (this.allTravelTimesCount === 0) return 0;
+    return this.allTravelTimesSum / this.allTravelTimesCount;
+  }
+
+  // completions per simulated minute, measured over a trailing window
+  throughputPerMinute() {
+    if (this.throughputLog.length < 2) return 0;
+    const now = this.throughputLog[this.throughputLog.length - 1];
+    const windowStart = Math.max(0, now.t - 60);
+    let ref = this.throughputLog[0];
+    for (const sample of this.throughputLog) {
+      if (sample.t >= windowStart) {
+        ref = sample;
+        break;
+      }
+    }
+    const dt = now.t - ref.t;
+    if (dt <= 0) return 0;
+    const completedInWindow = now.completed - ref.completed;
+    return (completedInWindow / dt) * 60;
+  }
+
+  edgeCongestion(edge) {
+    const effectiveCapacity = edge.capacity * (this.mode === 'one-way' ? 0.85 : 1);
+    const occ = (edge.forwardCount || 0) + (edge.reverseCount || 0);
+    return Math.min(1.6, occ / effectiveCapacity);
+  }
+
+  overallCongestion() {
+    let weighted = 0;
+    let totalLen = 0;
+    this.graph.edges.forEach((e) => {
+      const ratio = this.edgeCongestion(e);
+      weighted += ratio * e.length;
+      totalLen += e.length;
+    });
+    return totalLen > 0 ? weighted / totalLen : 0;
+  }
+
+  mostCongestedEdges(n = 3) {
+    return [...this.graph.edges]
+      .sort((a, b) => this.edgeCongestion(b) - this.edgeCongestion(a))
+      .slice(0, n);
+  }
+
+  peakCongestionSeen() {
+    return this._peakCongestion;
+  }
+
+  snapshot() {
+    return {
+      mode: this.mode,
+      elapsedTime: this.elapsedTime,
+      spawnedTotal: this.spawnedTotal,
+      completedTotal: this.completedTotal,
+      activeCount: this.activeCount(),
+      avgTravelTime: this.overallAverageTravelTime(),
+      recentAvgTravelTime: this.averageTravelTime(),
+      throughput: this.throughputPerMinute(),
+      overallCongestion: this.overallCongestion(),
+      peakCongestion: this.peakCongestionSeen(),
+      mostCongested: this.mostCongestedEdges(3).map((e) => ({
+        id: e.id,
+        from: e.from,
+        to: e.to,
+        congestion: this.edgeCongestion(e),
+      })),
+    };
+  }
+}
+
+</script>
+<script>
+/* Inlined from js/renderer.js */
+/**
+ * renderer.js
+ * Draws the campus map, congestion-tinted corridors, junction/building
+ * nodes, and every active pedestrian agent onto an HTML5 canvas.
+ */
+
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.scale = 1;
+    this.offsetX = 0;
+    this.offsetY = 0;
+  }
+
+  resize() {
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = 30;
+    const sx = (rect.width - pad * 2) / MAP_WIDTH;
+    const sy = (rect.height - pad * 2) / MAP_HEIGHT;
+    this.scale = Math.min(sx, sy);
+    this.offsetX = (rect.width - MAP_WIDTH * this.scale) / 2;
+    this.offsetY = (rect.height - MAP_HEIGHT * this.scale) / 2;
+    this.viewW = rect.width;
+    this.viewH = rect.height;
+  }
+
+  mapToScreen(x, y) {
+    return [this.offsetX + x * this.scale, this.offsetY + y * this.scale];
+  }
+
+  congestionColor(ratio) {
+    // 0 -> calm teal, 0.5 -> amber, 1+ -> alert red
+    const stops = [
+      { r: 0, c: [61, 168, 158] },
+      { r: 0.55, c: [230, 176, 60] },
+      { r: 1.0, c: [214, 82, 67] },
+      { r: 1.4, c: [168, 45, 58] },
+    ];
+    const clamped = Math.max(0, Math.min(1.4, ratio));
+    let a = stops[0], b = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (clamped >= stops[i].r && clamped <= stops[i + 1].r) {
+        a = stops[i];
+        b = stops[i + 1];
+        break;
+      }
+    }
+    const span = b.r - a.r || 1;
+    const t = (clamped - a.r) / span;
+    const rr = Math.round(a.c[0] + (b.c[0] - a.c[0]) * t);
+    const gg = Math.round(a.c[1] + (b.c[1] - a.c[1]) * t);
+    const bb = Math.round(a.c[2] + (b.c[2] - a.c[2]) * t);
+    return `rgb(${rr}, ${gg}, ${bb})`;
+  }
+
+  draw(sim, options = {}) {
+    const { ctx } = this;
+    const { showLabels = true } = options;
+    ctx.clearRect(0, 0, this.viewW, this.viewH);
+
+    this._drawGroundGrid();
+    this._drawEdges(sim);
+    this._drawNodes(sim, showLabels);
+    this._drawAgents(sim);
+  }
+
+  _drawGroundGrid() {
+    const { ctx } = this;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+    ctx.lineWidth = 1;
+    const step = 40 * this.scale;
+    for (let x = this.offsetX % step; x < this.viewW; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, this.viewH);
+      ctx.stroke();
+    }
+    for (let y = this.offsetY % step; y < this.viewH; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(this.viewW, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  _drawEdges(sim) {
+    const { ctx } = this;
+    sim.graph.edges.forEach((edge) => {
+      const a = sim.nodeLookup.get(edge.from);
+      const b = sim.nodeLookup.get(edge.to);
+      const [ax, ay] = this.mapToScreen(a.x, a.y);
+      const [bx, by] = this.mapToScreen(b.x, b.y);
+      const ratio = sim.edgeCongestion(edge);
+      const color = this.congestionColor(ratio);
+      const w = Math.max(4, edge.width * this.scale);
+
+      if (sim.mode === 'one-way') {
+        // Two thinner parallel lanes to signal a separated one-way corridor.
+        const dx = bx - ax, dy = by - ay;
+        const len = Math.hypot(dx, dy) || 1;
+        const px = -dy / len, py = dx / len;
+        const laneGap = w * 0.28;
+        [1, -1].forEach((side) => {
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = 0.85;
+          ctx.lineWidth = w * 0.36;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(ax + px * laneGap * side, ay + py * laneGap * side);
+          ctx.lineTo(bx + px * laneGap * side, by + py * laneGap * side);
+          ctx.stroke();
+          ctx.restore();
+        });
+      } else {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = w;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // corridor base/outline (drawn thin, under the color — gives a
+      // "paved path" look even at low congestion)
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      ctx.strokeStyle = '#0b1016';
+      ctx.lineWidth = w + 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.globalCompositeOperation = 'destination-over';
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  _drawNodes(sim, showLabels) {
+    const { ctx } = this;
+    sim.graph.nodes.forEach((node) => {
+      const [x, y] = this.mapToScreen(node.x, node.y);
+      let radius = 9;
+      let fill = '#8891a7';
+      let ring = 'rgba(255,255,255,0.25)';
+
+      if (node.type === 'gate') {
+        radius = 12;
+        fill = '#3da89e';
+      } else if (node.type === 'building') {
+        radius = 14;
+        fill = '#e6b03c';
+      } else {
+        radius = 7;
+        fill = '#5c6478';
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = ring;
+      ctx.stroke();
+      ctx.restore();
+
+      if (showLabels && node.type !== 'junction') {
+        ctx.save();
+        ctx.font = '600 12px "Inter", system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(235,238,244,0.92)';
+        ctx.textAlign = 'center';
+        const dy = node.y < MAP_HEIGHT / 2 ? -radius - 8 : radius + 18;
+        ctx.fillText(node.label, x, y + dy);
+        ctx.restore();
+      }
+    });
+  }
+
+  _drawAgents(sim) {
+    const { ctx } = this;
+    for (const agent of sim.agents) {
+      if (agent.state !== 'traveling') continue;
+      const [x, y] = this.mapToScreen(agent.x, agent.y);
+      const slow = agent.currentSpeedFactor < 0.65;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, 3.1, 0, Math.PI * 2);
+      ctx.fillStyle = slow ? '#f3c969' : '#eef3ff';
+      ctx.globalAlpha = 0.95;
+      ctx.fill();
+      if (slow) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(230,150,40,0.9)';
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+}
+
+</script>
+<script>
+/* Inlined from js/comparison.js */
+/**
+ * comparison.js
+ * Runs two-way and one-way configurations headlessly (no rendering,
+ * fixed timestep, executed synchronously in a tight loop) using an
+ * identical random seed so both runs face the same spawn pattern —
+ * an apples-to-apples comparison of the two corridor rules.
+ */
+
+function runHeadlessSimulation(mode, targetPopulation, simulatedSeconds, seed) {
+  const sim = new Simulation({ mode, targetPopulation, seed });
+  const dt = 0.15;
+  const steps = Math.round(simulatedSeconds / dt);
+  for (let i = 0; i < steps; i++) {
+    sim.step(dt);
+  }
+  return sim.snapshot();
+}
+
+function runComparison({ targetPopulation, simulatedSeconds = 240, seed = 1234 }) {
+  const twoWay = runHeadlessSimulation('two-way', targetPopulation, simulatedSeconds, seed);
+  const oneWay = runHeadlessSimulation('one-way', targetPopulation, simulatedSeconds, seed);
+  return { twoWay, oneWay };
+}
+
+</script>
+<script>
+/* Inlined from js/main.js */
+/**
+ * main.js
+ * Wires up the DOM controls, drives the live requestAnimationFrame
+ * loop, updates the stats readouts, and handles the headless
+ * "Compare Configurations" run.
+ */
+
+(function () {
+  const canvas = document.getElementById('mapCanvas');
+  const renderer = new Renderer(canvas);
+
+  let sim = new Simulation({ mode: 'two-way', targetPopulation: 60 });
+  let running = false;
+  let lastFrameTime = null;
+  let speedMultiplier = 1;
+
+  // ---- DOM refs -------------------------------------------------
+  const populationSlider = document.getElementById('populationSlider');
+  const populationValue = document.getElementById('populationValue');
+  const speedSlider = document.getElementById('speedSlider');
+  const speedValue = document.getElementById('speedValue');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  const headerStatus = document.getElementById('headerStatus');
+  const statusText = document.getElementById('statusText');
+
+  const statActive = document.getElementById('statActive');
+  const statCompleted = document.getElementById('statCompleted');
+  const statAvgTime = document.getElementById('statAvgTime');
+  const statThroughput = document.getElementById('statThroughput');
+  const statCongestion = document.getElementById('statCongestion');
+  const congestionMeter = document.getElementById('congestionMeter');
+  const bottleneckList = document.getElementById('bottleneckList');
+  const simClock = document.getElementById('simClock');
+
+  const compareBtn = document.getElementById('compareBtn');
+  const compareResults = document.getElementById('compareResults');
+  const compareVerdict = document.getElementById('compareVerdict');
+
+  // ---- Helpers ----------------------------------------------------
+
+  function formatClock(seconds) {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function nodeLabel(id) {
+    const n = sim.nodeLookup.get(id);
+    return n ? n.label : id;
+  }
+
+  function setRunningUi(state) {
+    // state: 'stopped' | 'running' | 'paused'
+    headerStatus.classList.remove('running', 'paused');
+    if (state === 'running') {
+      headerStatus.classList.add('running');
+      statusText.textContent = 'Running';
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+      startBtn.textContent = 'Start';
+    } else if (state === 'paused') {
+      headerStatus.classList.add('paused');
+      statusText.textContent = 'Paused';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Resume';
+      pauseBtn.disabled = true;
+    } else {
+      statusText.textContent = 'Stopped';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start';
+      pauseBtn.disabled = true;
+    }
+  }
+
+  function updateStatsUi() {
+    const snap = sim.snapshot();
+    statActive.textContent = snap.activeCount;
+    statCompleted.textContent = snap.completedTotal;
+    statAvgTime.innerHTML = `${snap.avgTravelTime.toFixed(1)}<span class="unit">s</span>`;
+    statThroughput.innerHTML = `${snap.throughput.toFixed(1)}<span class="unit">/min</span>`;
+    const pct = Math.min(100, Math.round(snap.overallCongestion * 100));
+    statCongestion.innerHTML = `${pct}<span class="unit">%</span>`;
+    congestionMeter.style.width = `${pct}%`;
+    simClock.textContent = formatClock(snap.elapsedTime);
+
+    bottleneckList.innerHTML = '';
+    snap.mostCongested.forEach((edge) => {
+      const li = document.createElement('li');
+      const pctVal = Math.min(160, Math.round(edge.congestion * 100));
+      li.innerHTML = `<span class="cname">${nodeLabel(edge.from)} → ${nodeLabel(edge.to)}</span><span class="cval">${pctVal}%</span>`;
+      bottleneckList.appendChild(li);
+    });
+  }
+
+  // ---- Animation loop ----------------------------------------------
+
+  function frame(ts) {
+    if (!running) return;
+    if (lastFrameTime === null) lastFrameTime = ts;
+    let dtReal = (ts - lastFrameTime) / 1000;
+    lastFrameTime = ts;
+    dtReal = Math.min(dtReal, 0.1); // guard against tab-switch jumps
+
+    const dtSim = dtReal * speedMultiplier;
+    // step in small sub-increments for numerical stability at high speed multipliers
+    const subSteps = Math.max(1, Math.ceil(dtSim / 0.12));
+    const subDt = dtSim / subSteps;
+    for (let i = 0; i < subSteps; i++) sim.step(subDt);
+
+    renderer.draw(sim);
+    updateStatsUi();
+    requestAnimationFrame(frame);
+  }
+
+  function startLoop() {
+    running = true;
+    lastFrameTime = null;
+    setRunningUi('running');
+    requestAnimationFrame(frame);
+  }
+
+  function pauseLoop() {
+    running = false;
+    setRunningUi('paused');
+  }
+
+  // ---- Control wiring -----------------------------------------------
+
+  populationSlider.addEventListener('input', () => {
+    const v = Number(populationSlider.value);
+    populationValue.textContent = v;
+    sim.setTargetPopulation(v);
+  });
+
+  speedSlider.addEventListener('input', () => {
+    speedMultiplier = Number(speedSlider.value);
+    speedValue.textContent = `${speedMultiplier}×`;
+  });
+
+  startBtn.addEventListener('click', () => {
+    startLoop();
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    pauseLoop();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    pauseLoop();
+    const mode = sim.mode;
+    sim = new Simulation({ mode, targetPopulation: Number(populationSlider.value) });
+    renderer.resize();
+    renderer.draw(sim);
+    updateStatsUi();
+    setRunningUi('stopped');
+  });
+
+  modeBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      modeBtns.forEach((b) => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      sim.setMode(btn.dataset.mode);
+    });
+  });
+
+  window.addEventListener('resize', () => {
+    renderer.resize();
+    renderer.draw(sim);
+  });
+
+  // ---- Comparison ----------------------------------------------------
+
+  compareBtn.addEventListener('click', () => {
+    compareBtn.disabled = true;
+    compareBtn.textContent = 'Running…';
+
+    // Let the UI repaint the disabled button before the (synchronous,
+    // but fast) headless computation runs.
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const population = Number(populationSlider.value);
+        const { twoWay, oneWay } = runComparison({
+          targetPopulation: population,
+          simulatedSeconds: 240,
+          seed: 20240001,
+        });
+        renderComparison(twoWay, oneWay);
+        compareBtn.disabled = false;
+        compareBtn.textContent = 'Run Comparison';
+      }, 10);
+    });
+  });
+
+  function setBar(fillId, numId, value, maxValue, suffix) {
+    const fill = document.getElementById(fillId);
+    const num = document.getElementById(numId);
+    const pct = maxValue > 0 ? Math.max(2, Math.min(100, (value / maxValue) * 100)) : 0;
+    fill.style.width = `${pct}%`;
+    num.textContent = `${value.toFixed(1)}${suffix}`;
+  }
+
+  function renderComparison(twoWay, oneWay) {
+    compareResults.hidden = false;
+
+    const maxTravel = Math.max(twoWay.avgTravelTime, oneWay.avgTravelTime, 1);
+    setBar('barTravelTwo', 'numTravelTwo', twoWay.avgTravelTime, maxTravel, 's');
+    setBar('barTravelOne', 'numTravelOne', oneWay.avgTravelTime, maxTravel, 's');
+
+    const maxThroughput = Math.max(twoWay.throughput, oneWay.throughput, 1);
+    setBar('barThroughputTwo', 'numThroughputTwo', twoWay.throughput, maxThroughput, '');
+    setBar('barThroughputOne', 'numThroughputOne', oneWay.throughput, maxThroughput, '');
+
+    const maxCong = Math.max(twoWay.peakCongestion, oneWay.peakCongestion, 1) * 100;
+    setBar('barCongestionTwo', 'numCongestionTwo', twoWay.peakCongestion * 100, maxCong, '%');
+    setBar('barCongestionOne', 'numCongestionOne', oneWay.peakCongestion * 100, maxCong, '%');
+
+    const travelDelta = twoWay.avgTravelTime - oneWay.avgTravelTime; // positive = one-way faster
+    const throughputDelta = oneWay.throughput - twoWay.throughput; // positive = one-way higher
+    const oneWayWins = travelDelta > 0 && throughputDelta >= 0;
+    const twoWayWins = travelDelta < 0 && throughputDelta <= 0;
+
+    let verdict = '';
+    if (Math.abs(travelDelta) < 0.5 && Math.abs(throughputDelta) < 0.5) {
+      verdict = 'At this pedestrian volume, both corridor rules perform about the same — the bottleneck corridors aren\'t under enough pressure yet to show a clear winner. Try a higher pedestrian count.';
+    } else if (oneWayWins) {
+      verdict = `At ${twoWay.spawnedTotal} pedestrians spawned, one-way corridors won on both measures: trips were ${Math.abs(travelDelta).toFixed(1)}s faster on average, and throughput was up by ${Math.abs(throughputDelta).toFixed(1)} trips/min. Removing counter-flow friction at Central Plaza more than made up for the slightly narrower separated lanes.`;
+    } else if (twoWayWins) {
+      verdict = `At ${twoWay.spawnedTotal} pedestrians spawned, two-way corridors won on both measures: trips were ${Math.abs(travelDelta).toFixed(1)}s faster on average, and throughput was up by ${Math.abs(throughputDelta).toFixed(1)} trips/min. At this volume the narrower, separated one-way lanes cost more capacity than the counter-flow friction they removed.`;
+    } else {
+      // mixed result: one metric favors each mode
+      verdict = `At ${twoWay.spawnedTotal} pedestrians spawned, the two rules trade off: one-way corridors gave ${travelDelta > 0 ? `${travelDelta.toFixed(1)}s faster` : `${Math.abs(travelDelta).toFixed(1)}s slower`} average trips, while throughput went ${throughputDelta > 0 ? 'up' : 'down'} by ${Math.abs(throughputDelta).toFixed(1)} trips/min. Which one is "better" here depends on whether you're optimizing for individual trip speed or total campus throughput.`;
+    }
+    compareVerdict.textContent = verdict;
+  }
+
+  // ---- Init -----------------------------------------------------------
+
+  function init() {
+    renderer.resize();
+    renderer.draw(sim);
+    updateStatsUi();
+    setRunningUi('stopped');
+  }
+
+  init();
+})();
+
+</script>
+</body>
+</html>
